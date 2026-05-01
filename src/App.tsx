@@ -15,11 +15,6 @@ const PAGE_TITLES: Record<string, { title: string; desc: string }> = {
   preview: { title: '预览与导出', desc: '查看完整座位方案并导出' },
 }
 
-function formatTime(seconds: number) {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m}:${String(s).padStart(2, '0')}`
-}
 
 export default function App() {
   const { activePage } = useVenueStore()
@@ -34,8 +29,8 @@ export default function App() {
   }, [])
 
   const { expired, secondsLeft } = trialInfo
-  const showWarning = secondsLeft <= 120 // ≤ 2 minutes
-  const isUrgent   = secondsLeft <= 60   // ≤ 1 minute → red
+  const showWarning = secondsLeft <= 3 * 24 * 3600 // ≤ 3 days
+  const isUrgent   = secondsLeft <= 1 * 24 * 3600 // ≤ 1 day → red
 
   if (expired) return <TrialExpired />
 
@@ -58,7 +53,7 @@ export default function App() {
           color: isUrgent ? '#f87171' : '#fbbf24',
           fontSize: 12,
         }}>
-          ⏳ 试用期剩余 {formatTime(secondsLeft)}
+          ⏳ 试用期剩余 {trialInfo.daysLeft} 天
         </div>
       )}
       <main className="main-area">

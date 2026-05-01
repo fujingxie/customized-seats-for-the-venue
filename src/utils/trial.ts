@@ -1,5 +1,5 @@
 const KEY = '__trial_start__'
-const DURATION_MS = 3 * 60 * 1000 // 3 minutes for testing
+const DURATION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 export function getTrialInfo(): { expired: boolean; daysLeft: number; secondsLeft: number; expireDate: Date } {
   let start = localStorage.getItem(KEY)
