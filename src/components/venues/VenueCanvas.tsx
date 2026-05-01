@@ -138,31 +138,45 @@ const VenueCanvas = forwardRef<CanvasHandle, Props>(function VenueCanvas(
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [ready, setReady] = useState(false)
 
-  const dragRef      = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
-  const movedRef     = useRef(false)
-  const wrapperRef   = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const dragRef        = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
+  const movedRef       = useRef(false)
+  const wrapperRef     = useRef<HTMLDivElement>(null)
+  const containerRef   = useRef<HTMLDivElement>(null)
+  const fittedRef      = useRef(false)
 
   // Seat positions are always calculated for the FIXED prop dimensions (not screen size)
   const positions = getSeatPositions(venue, width, height)
   const { scale, ox, oy } = view
 
-  // Auto fit-to-container on mount
+  // Reset fit when venue changes
+  useEffect(() => {
+    fittedRef.current = false
+    setReady(false)
+    setSelected(null)
+  }, [venue.id])
+
+  // Auto fit-to-container using ResizeObserver (fires once with real size)
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const W = el.clientWidth
-    const H = el.clientHeight
-    if (W > 0 && H > 0) {
-      const fitScale = Math.min(W / width, H / height) * 0.88
-      setView({
-        scale: fitScale,
-        ox: (W - width  * fitScale) / 2,
-        oy: (H - height * fitScale) / 2,
-      })
-    }
-    setReady(true)
-  }, [width, height])
+    const observer = new ResizeObserver(([entry]) => {
+      if (fittedRef.current || document.fullscreenElement) return
+      const W = entry.contentRect.width
+      const H = entry.contentRect.height
+      if (W > 0 && H > 0) {
+        const fitScale = Math.min(W / width, H / height) * 0.88
+        setView({
+          scale: fitScale,
+          ox: (W - width  * fitScale) / 2,
+          oy: (H - height * fitScale) / 2,
+        })
+        fittedRef.current = true
+        setReady(true)
+      }
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [venue.id, width, height])
 
   // Fullscreen lifecycle
   useEffect(() => {
