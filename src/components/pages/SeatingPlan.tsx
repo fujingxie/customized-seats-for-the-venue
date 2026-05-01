@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { Plus, Wand2, RotateCcw, CheckCircle2, Trash2, Download, GripVertical, ZoomIn, ZoomOut, Minimize2, Expand } from 'lucide-react'
+import { Plus, Wand2, RotateCcw, CheckCircle2, Trash2, Download, GripVertical, ZoomIn, ZoomOut, Minimize2, Expand, MousePointer2, Hand } from 'lucide-react'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -175,6 +175,7 @@ export default function SeatingPlan() {
   const canvasRef = useRef<CanvasHandle>(null)
   const [zoomPct, setZoomPct] = useState(100)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [swapMode, setSwapMode] = useState<'click' | 'drag'>('click')
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<VenueType>('circle')
   const [newConfig, setNewConfig] = useState<VenueConfig>(defaultConfig('circle'))
@@ -311,9 +312,38 @@ export default function SeatingPlan() {
             <span>当前会场：{venue ? venue.name : '未选择'}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {venue && (
-                <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                  点击两个座位互换位置
-                </span>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 2,
+                  background: 'var(--surface2)', borderRadius: 7, padding: 2,
+                  border: '1px solid var(--border)',
+                }}>
+                  <button
+                    title="点击互换"
+                    onClick={() => setSwapMode('click')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '3px 9px', borderRadius: 5, border: 'none',
+                      fontSize: 11, cursor: 'pointer', transition: 'all 0.15s',
+                      background: swapMode === 'click' ? 'var(--accent)' : 'transparent',
+                      color: swapMode === 'click' ? 'white' : 'var(--text2)',
+                    }}
+                  >
+                    <MousePointer2 size={12} /> 点击
+                  </button>
+                  <button
+                    title="拖拽互换"
+                    onClick={() => setSwapMode('drag')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '3px 9px', borderRadius: 5, border: 'none',
+                      fontSize: 11, cursor: 'pointer', transition: 'all 0.15s',
+                      background: swapMode === 'drag' ? 'var(--accent)' : 'transparent',
+                      color: swapMode === 'drag' ? 'white' : 'var(--text2)',
+                    }}
+                  >
+                    <Hand size={12} /> 拖拽
+                  </button>
+                </div>
               )}
               {venue && (
                 <div className="canvas-zoom-bar" style={{ position: 'static', boxShadow: 'none' }}>
@@ -344,6 +374,7 @@ export default function SeatingPlan() {
                   onSwap={(a, b) => swapSeats(venue.id, a, b)}
                   onScaleChange={setZoomPct}
                   onFullscreenChange={setIsFullscreen}
+                  swapMode={swapMode}
                 />
               : <div className="empty-state"><div className="empty-icon">🏛</div><p>请先选择或新建会场</p></div>
             }
