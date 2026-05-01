@@ -4,6 +4,7 @@ import VenueManagement from './components/pages/VenueManagement'
 import PersonManagement from './components/pages/PersonManagement'
 import SeatingPlan from './components/pages/SeatingPlan'
 import PreviewExport from './components/pages/PreviewExport'
+import UserGuide from './components/pages/UserGuide'
 import TrialExpired from './components/ui/TrialExpired'
 import { useVenueStore } from './store/venueStore'
 import { getTrialInfo } from './utils/trial'
@@ -13,6 +14,7 @@ const PAGE_TITLES: Record<string, { title: string; desc: string }> = {
   people:  { title: '人员管理',   desc: '维护人员名单及排名' },
   seating: { title: '会场座位智能定制系统', desc: '选择会场并设置台上台下人员及排序规则，系统将自动完成座位分配。' },
   preview: { title: '预览与导出', desc: '查看完整座位方案并导出' },
+  guide:   { title: '使用指导',   desc: '功能说明与操作步骤' },
 }
 
 
@@ -39,6 +41,7 @@ export default function App() {
     people:  <div className="page-scroll"><PersonManagement /></div>,
     seating: <SeatingPlan />,
     preview: <div className="page-scroll"><PreviewExport /></div>,
+    guide:   <div className="page-scroll"><UserGuide /></div>,
   }
 
   return (

@@ -70,4 +70,4 @@ export interface Venue {
   updatedAt: string
 }
 
-export type Page = 'venues' | 'people' | 'seating' | 'preview'
+export type Page = 'venues' | 'people' | 'seating' | 'preview' | 'guide'

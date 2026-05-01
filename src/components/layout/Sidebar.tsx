@@ -1,4 +1,4 @@
-import { LayoutGrid, Users, Armchair, Eye } from 'lucide-react'
+import { LayoutGrid, Users, Armchair, Eye, BookOpen } from 'lucide-react'
 import { useVenueStore } from '../../store/venueStore'
 import { Page } from '../../types'
 import clsx from 'clsx'
@@ -8,6 +8,7 @@ const NAV_ITEMS: { page: Page; label: string; icon: React.ReactNode }[] = [
   { page: 'people',  label: '人员管理', icon: <Users size={16} /> },
   { page: 'seating', label: '座位排序', icon: <Armchair size={16} /> },
   { page: 'preview', label: '预览与导出', icon: <Eye size={16} /> },
+  { page: 'guide',   label: '使用指导', icon: <BookOpen size={16} /> },
 ]
 
 export default function Sidebar() {
