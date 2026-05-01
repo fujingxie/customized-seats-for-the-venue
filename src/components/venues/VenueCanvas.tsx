@@ -3,7 +3,7 @@ import { Venue } from '../../types'
 import { getSeatPositions, SeatPosition } from '../../utils/seatLayout'
 
 const SEAT_R = 14
-const MIN_SCALE = 0.4
+const MIN_SCALE = 0.3
 const MAX_SCALE = 5.0
 
 interface Props {
@@ -130,85 +130,56 @@ function SeatNode({ pos, venue, selected, onClick }: {
 }
 
 const VenueCanvas = forwardRef<CanvasHandle, Props>(function VenueCanvas(
-  { venue, width = 560, height = 420, onSwap, readonly, onScaleChange, onFullscreenChange },
+  { venue, width = 520, height = 400, onSwap, readonly, onScaleChange, onFullscreenChange },
   ref
 ) {
   const [selected, setSelected] = useState<string | null>(null)
-  const [view, setView]         = useState({ scale: 1, ox: 0, oy: 0 })
+  // ox/oy/scale are in SVG coordinate space (within viewBox)
+  const [view, setView] = useState({ scale: 1, ox: 0, oy: 0 })
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [ready, setReady] = useState(false)
 
-  const dragRef        = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
-  const movedRef       = useRef(false)
-  const wrapperRef     = useRef<HTMLDivElement>(null)
-  const containerRef   = useRef<HTMLDivElement>(null)
-  const fittedRef      = useRef(false)
+  const dragRef    = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
+  const movedRef   = useRef(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const svgRef     = useRef<SVGSVGElement>(null)
 
-  // Seat positions are always calculated for the FIXED prop dimensions (not screen size)
   const positions = getSeatPositions(venue, width, height)
   const { scale, ox, oy } = view
 
-  // Reset fit when venue changes
+  // Reset zoom/pan when venue changes
   useEffect(() => {
-    fittedRef.current = false
-    setReady(false)
+    setView({ scale: 1, ox: 0, oy: 0 })
     setSelected(null)
   }, [venue.id])
 
-  // Auto fit-to-container using ResizeObserver (fires once with real size)
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const observer = new ResizeObserver(([entry]) => {
-      if (fittedRef.current || document.fullscreenElement) return
-      const W = entry.contentRect.width
-      const H = entry.contentRect.height
-      if (W > 0 && H > 0) {
-        const fitScale = Math.min(W / width, H / height) * 0.88
-        setView({
-          scale: fitScale,
-          ox: (W - width  * fitScale) / 2,
-          oy: (H - height * fitScale) / 2,
-        })
-        fittedRef.current = true
-        setReady(true)
-      }
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [venue.id, width, height])
-
-  // Fullscreen lifecycle
+  // Fullscreen lifecycle — viewBox handles auto-scaling, just reset user zoom
   useEffect(() => {
     function onFsChange() {
       const fs = !!document.fullscreenElement
       setIsFullscreen(fs)
       onFullscreenChange?.(fs)
-
-      if (fs) {
-        // Zoom to fit: scale the 520×400 canvas so it fills ~90% of the screen
-        const W = window.innerWidth
-        const H = window.innerHeight
-        const fitScale = Math.min(W / width, H / height) * 0.90
-        setView({
-          scale: fitScale,
-          ox: (W - width  * fitScale) / 2,
-          oy: (H - height * fitScale) / 2,
-        })
-      } else {
-        setView({ scale: 1, ox: 0, oy: 0 })
-      }
+      setView({ scale: 1, ox: 0, oy: 0 })
     }
     document.addEventListener('fullscreenchange', onFsChange)
     return () => document.removeEventListener('fullscreenchange', onFsChange)
-  }, [onFullscreenChange, width, height])
+  }, [onFullscreenChange])
 
   // Notify parent of scale changes
   useEffect(() => {
     onScaleChange?.(Math.round(scale * 100))
   }, [scale, onScaleChange])
 
-  // ── zoom helpers ───────────────────────────────────────────────
+  // Convert screen coords → SVG viewBox coordinate space
+  function screenToSVG(clientX: number, clientY: number) {
+    const svg = svgRef.current
+    if (!svg) return { x: clientX, y: clientY }
+    const pt = svg.createSVGPoint()
+    pt.x = clientX
+    pt.y = clientY
+    const p = pt.matrixTransform(svg.getScreenCTM()!.inverse())
+    return { x: p.x, y: p.y }
+  }
+
   function zoomAt(delta: number, cx: number, cy: number) {
     setView(v => {
       const next  = Math.max(MIN_SCALE, Math.min(MAX_SCALE, v.scale * delta))
@@ -219,15 +190,12 @@ const VenueCanvas = forwardRef<CanvasHandle, Props>(function VenueCanvas(
 
   function handleWheel(e: React.WheelEvent) {
     e.preventDefault()
-    const rect = containerRef.current!.getBoundingClientRect()
-    zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX - rect.left, e.clientY - rect.top)
+    const { x, y } = screenToSVG(e.clientX, e.clientY)
+    zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, x, y)
   }
 
   function handleZoomBtn(delta: number) {
-    const rect = containerRef.current?.getBoundingClientRect()
-    const cx = rect ? rect.width  / 2 : width  / 2
-    const cy = rect ? rect.height / 2 : height / 2
-    zoomAt(delta, cx, cy)
+    zoomAt(delta, width / 2, height / 2)
   }
 
   function resetView() { setView({ scale: 1, ox: 0, oy: 0 }) }
@@ -247,25 +215,25 @@ const VenueCanvas = forwardRef<CanvasHandle, Props>(function VenueCanvas(
     toggleFullscreen,
   }))
 
-  // ── pan handlers ───────────────────────────────────────────────
-  function handlePointerDown(e: React.PointerEvent) {
+  function handlePointerDown(e: React.PointerEvent<SVGSVGElement>) {
     if ((e.target as Element).closest('[data-seat]')) return
-    dragRef.current = { startX: e.clientX, startY: e.clientY, ox, oy }
+    const { x, y } = screenToSVG(e.clientX, e.clientY)
+    dragRef.current = { startX: x, startY: y, ox: view.ox, oy: view.oy }
     movedRef.current = false
-    ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
+    e.currentTarget.setPointerCapture(e.pointerId)
   }
 
-  function handlePointerMove(e: React.PointerEvent) {
+  function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
     if (!dragRef.current) return
-    const dx = e.clientX - dragRef.current.startX
-    const dy = e.clientY - dragRef.current.startY
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) movedRef.current = true
+    const { x, y } = screenToSVG(e.clientX, e.clientY)
+    const dx = x - dragRef.current.startX
+    const dy = y - dragRef.current.startY
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) movedRef.current = true
     setView(v => ({ ...v, ox: dragRef.current!.ox + dx, oy: dragRef.current!.oy + dy }))
   }
 
   function handlePointerUp() { dragRef.current = null }
 
-  // ── seat click ─────────────────────────────────────────────────
   function handleSeatClick(seatId: string) {
     if (readonly || movedRef.current) return
     if (!selected) { setSelected(seatId); return }
@@ -278,32 +246,22 @@ const VenueCanvas = forwardRef<CanvasHandle, Props>(function VenueCanvas(
     <div
       ref={wrapperRef}
       className="venue-canvas-wrapper"
-      style={{ position: 'relative', width: '100%', height: '100%', opacity: ready ? 1 : 0 }}
+      style={{ position: 'relative', width: '100%', height: '100%' }}
     >
-      <div
-        ref={containerRef}
-        style={{
-          width: '100%',
-          height: '100%',
-          overflow: 'hidden',
-          cursor: dragRef.current ? 'grabbing' : 'grab',
-        }}
+      {/* SVG fills container; viewBox auto-scales content to fit any screen size */}
+      <svg
+        ref={svgRef}
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={{ display: 'block', cursor: dragRef.current ? 'grabbing' : 'grab' }}
         onWheel={handleWheel}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       >
-        <svg
-          width={width}
-          height={height}
-          viewBox={`0 0 ${width} ${height}`}
-          style={{
-            background: 'transparent',
-            transform: `translate(${ox}px, ${oy}px) scale(${scale})`,
-            transformOrigin: '0 0',
-            transition: dragRef.current ? 'none' : 'transform 0.08s ease-out',
-          }}
-        >
+        <g transform={`translate(${ox}, ${oy}) scale(${scale})`}>
           <VenueBackground venue={venue} width={width} height={height} />
           {positions.map(pos => (
             <SeatNode key={pos.id} pos={pos} venue={venue}
@@ -316,8 +274,8 @@ const VenueCanvas = forwardRef<CanvasHandle, Props>(function VenueCanvas(
               已选中，点击另一个座位完成互换
             </text>
           )}
-        </svg>
-      </div>
+        </g>
+      </svg>
 
       {isFullscreen && (
         <div style={{

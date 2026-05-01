@@ -762,6 +762,7 @@ html, body, #root {
   padding: 16px;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
 }
 
 .canvas-legend {
