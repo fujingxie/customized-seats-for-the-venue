@@ -136,6 +136,7 @@ const VenueCanvas = forwardRef<CanvasHandle, Props>(function VenueCanvas(
   const [selected, setSelected] = useState<string | null>(null)
   const [view, setView]         = useState({ scale: 1, ox: 0, oy: 0 })
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [ready, setReady] = useState(false)
 
   const dragRef      = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
   const movedRef     = useRef(false)
@@ -145,6 +146,23 @@ const VenueCanvas = forwardRef<CanvasHandle, Props>(function VenueCanvas(
   // Seat positions are always calculated for the FIXED prop dimensions (not screen size)
   const positions = getSeatPositions(venue, width, height)
   const { scale, ox, oy } = view
+
+  // Auto fit-to-container on mount
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const W = el.clientWidth
+    const H = el.clientHeight
+    if (W > 0 && H > 0) {
+      const fitScale = Math.min(W / width, H / height) * 0.88
+      setView({
+        scale: fitScale,
+        ox: (W - width  * fitScale) / 2,
+        oy: (H - height * fitScale) / 2,
+      })
+    }
+    setReady(true)
+  }, [width, height])
 
   // Fullscreen lifecycle
   useEffect(() => {
@@ -246,7 +264,7 @@ const VenueCanvas = forwardRef<CanvasHandle, Props>(function VenueCanvas(
     <div
       ref={wrapperRef}
       className="venue-canvas-wrapper"
-      style={{ position: 'relative', width, height }}
+      style={{ position: 'relative', width: '100%', height: '100%', opacity: ready ? 1 : 0 }}
     >
       <div
         ref={containerRef}

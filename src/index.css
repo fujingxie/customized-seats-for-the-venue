@@ -757,10 +757,11 @@ html, body, #root {
 .canvas-area {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   padding: 16px;
   overflow: hidden;
+  min-height: 0;
 }
 
 .canvas-legend {
