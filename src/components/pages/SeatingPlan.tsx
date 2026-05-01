@@ -6,20 +6,18 @@ import { CSS } from '@dnd-kit/utilities'
 import { useVenueStore } from '../../store/venueStore'
 import VenueCanvas, { CanvasHandle } from '../venues/VenueCanvas'
 import Modal from '../ui/Modal'
-import ImportModal from '../ui/ImportModal'
+import AddFromPoolModal from '../ui/AddFromPoolModal'
 import { VenueType, VenueConfig, CircleConfig, EllipseConfig, RectangleConfig, UShapeConfig, SortMode, Person } from '../../types'
 import { CircleIcon, EllipseIcon, RectangleIcon, UShapeIcon } from '../venues/VenueTypeIcon'
 import clsx from 'clsx'
 
 // ── Sortable person row ─────────────────────────────────────────
 function SortablePersonRow({
-  person, venue, onDelete, checked, onCheck, groupColor,
+  person, venue, onDelete, groupColor,
 }: {
   person: Person
   venue: { id: string; assignments: Record<string, string> }
   onDelete: () => void
-  checked: boolean
-  onCheck: (id: string, v: boolean) => void
   groupColor: string
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: person.id })
@@ -28,14 +26,8 @@ function SortablePersonRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
-      className={`person-row${checked ? ' person-row--checked' : ''}`}
+      className="person-row"
     >
-      <input
-        type="checkbox"
-        className="person-check"
-        checked={checked}
-        onChange={e => onCheck(person.id, e.target.checked)}
-      />
       <span className="person-drag" {...attributes} {...listeners}><GripVertical size={12} /></span>
       <span className="person-rank">#{person.rank}</span>
       <span className="person-name">{person.name}</span>
@@ -54,7 +46,7 @@ function SortablePersonRow({
 
 // ── Sortable people list ────────────────────────────────────────
 function SortablePeopleList({
-  venueId, groupId, members, venue, onDelete, onReorder, selected, onCheck, groupColor,
+  venueId, groupId, members, venue, onDelete, onReorder, groupColor,
 }: {
   venueId: string
   groupId: string
@@ -62,8 +54,6 @@ function SortablePeopleList({
   venue: { id: string; assignments: Record<string, string> }
   onDelete: (personId: string) => void
   onReorder: (venueId: string, groupId: string, orderedIds: string[]) => void
-  selected: Set<string>
-  onCheck: (id: string, v: boolean) => void
   groupColor: string
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -82,8 +72,6 @@ function SortablePeopleList({
       <SortableContext items={members.map(p => p.id)} strategy={verticalListSortingStrategy}>
         {members.map(p => (
           <SortablePersonRow key={p.id} person={p} venue={venue}
-            checked={selected.has(p.id)}
-            onCheck={onCheck}
             groupColor={groupColor}
             onDelete={() => onDelete(p.id)} />
         ))}
@@ -180,14 +168,13 @@ function ConfigForm({ type, config, onChange }: { type: VenueType; config: Venue
 export default function SeatingPlan() {
   const { venues, activeVenueId, setActiveVenue, createVenue, deleteVenue,
     runAutoAssign, swapSeats, clearAssignments, updateGroup, addPerson, deletePerson,
-    bulkImportPeople, bulkDeletePeople, bulkUpdateZone, reorderPeople, setActivePage } = useVenueStore()
+    reorderPeople, setActivePage } = useVenueStore()
 
   const [showNewVenue, setShowNewVenue] = useState(false)
-  const [showImport, setShowImport] = useState(false)
+  const [showAddFromPool, setShowAddFromPool] = useState(false)
   const canvasRef = useRef<CanvasHandle>(null)
   const [zoomPct, setZoomPct] = useState(100)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [selectedPeople, setSelectedPeople] = useState<Set<string>>(new Set())
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<VenueType>('circle')
   const [newConfig, setNewConfig] = useState<VenueConfig>(defaultConfig('circle'))
@@ -199,9 +186,6 @@ export default function SeatingPlan() {
   const [addName, setAddName] = useState('')
   const [addRank, setAddRank] = useState('')
   const [addGroupId, setAddGroupId] = useState('')
-
-  // Clear selections whenever active venue changes
-  React.useEffect(() => { setSelectedPeople(new Set()) }, [activeVenueId])
 
   function handleCreateVenue() {
     if (!newName.trim()) return
@@ -230,8 +214,6 @@ export default function SeatingPlan() {
   const allMembers   = mainGroup  ? venue!.people.filter(p => p.groupId === mainGroup.id ).sort((a,b) => a.rank-b.rank) : []
 
   const assignedCount = Object.keys(venue?.assignments ?? {}).length
-
-
 
   const venueInfo = venue
     ? [
@@ -333,7 +315,6 @@ export default function SeatingPlan() {
                   点击两个座位互换位置
                 </span>
               )}
-              {/* Zoom toolbar — lives here so it doesn't overlap canvas content */}
               {venue && (
                 <div className="canvas-zoom-bar" style={{ position: 'static', boxShadow: 'none' }}>
                   <button className="zoom-btn" title="放大" onClick={() => canvasRef.current?.zoomIn()}>
@@ -384,7 +365,6 @@ export default function SeatingPlan() {
 
         {/* ── RIGHT: sorting rules + venue info ── */}
         <div className="ws-panel">
-          {/* Sorting rules per group */}
           <div className="ws-panel-header">排序规则</div>
           <div className="ws-panel-body">
             {venue?.groups.map(g => (
@@ -393,7 +373,6 @@ export default function SeatingPlan() {
                 <select className="form-input" style={{ fontSize: 12 }} value={g.sortMode}
                   onChange={e => {
                     updateGroup(venue.id, g.id, { sortMode: e.target.value as SortMode })
-                    // Re-assign immediately so canvas reflects the new rule
                     runAutoAssign(venue.id)
                   }}>
                   {(Object.keys(SORT_LABELS) as SortMode[]).map(m => (
@@ -401,24 +380,17 @@ export default function SeatingPlan() {
                   ))}
                 </select>
                 {g.sortMode === 'center-alternating' && (
-                  <div className="rule-desc">
-                    第1名居中，第2名左侧，第3名右侧，依次交替排列。
-                  </div>
+                  <div className="rule-desc">第1名居中，第2名左侧，第3名右侧，依次交替排列。</div>
                 )}
                 {g.sortMode === 'clockwise' && (
-                  <div className="rule-desc">
-                    从参考位开始，顺时针方向依次排列。
-                  </div>
+                  <div className="rule-desc">从参考位开始，顺时针方向依次排列。</div>
                 )}
                 {g.sortMode === 'counter-clockwise' && (
-                  <div className="rule-desc">
-                    从参考位开始，逆时针方向依次排列。
-                  </div>
+                  <div className="rule-desc">从参考位开始，逆时针方向依次排列。</div>
                 )}
               </div>
             ))}
 
-            {/* Venue info */}
             {venue && (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', margin: '14px 0 8px', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
@@ -445,17 +417,9 @@ export default function SeatingPlan() {
             人员列表
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 11, color: 'var(--text3)' }}>{venue?.people.length ?? 0}人</span>
-              {venue && selectedPeople.size > 0 && (
-                <button className="btn-danger btn-xs" onClick={() => {
-                  bulkDeletePeople(venue.id, [...selectedPeople])
-                  setSelectedPeople(new Set())
-                }}>
-                  <Trash2 size={11} /> 删除选中 ({selectedPeople.size})
-                </button>
-              )}
               {venue && (
-                <button className="btn-primary btn-xs" onClick={() => setShowImport(true)}>
-                  <Download size={11} /> 导入
+                <button className="btn-primary btn-xs" onClick={() => setShowAddFromPool(true)}>
+                  <Download size={11} /> 从人员库选人
                 </button>
               )}
             </div>
@@ -466,18 +430,7 @@ export default function SeatingPlan() {
             {venue && (isRound ? (
               <div className="people-section">
                 <div className="people-section-header">
-                  <label className="section-select-all">
-                    <input type="checkbox"
-                      checked={allMembers.length > 0 && allMembers.every(p => selectedPeople.has(p.id))}
-                      onChange={e => {
-                        setSelectedPeople(prev => {
-                          const next = new Set(prev)
-                          allMembers.forEach(p => e.target.checked ? next.add(p.id) : next.delete(p.id))
-                          return next
-                        })
-                      }} />
-                    {allGroup?.name ?? '参会人员'}
-                  </label>
+                  <span className="section-select-all">{allGroup?.name ?? '参会人员'}</span>
                   <span className="people-count-badge">{allMembers.length}</span>
                 </div>
                 <SortablePeopleList
@@ -485,28 +438,15 @@ export default function SeatingPlan() {
                   members={allMembers} venue={venue}
                   onDelete={pid => deletePerson(venue.id, pid)}
                   onReorder={reorderPeople}
-                  selected={selectedPeople}
-                  onCheck={(id, v) => setSelectedPeople(prev => { const s = new Set(prev); v ? s.add(id) : s.delete(id); return s })}
                   groupColor={allGroup?.color ?? '#64748b'}
                 />
-                {allMembers.length === 0 && <div style={{ color: 'var(--text3)', fontSize: 11, padding: '6px 0' }}>暂无人员，点击「导入」添加</div>}
+                {allMembers.length === 0 && <div style={{ color: 'var(--text3)', fontSize: 11, padding: '6px 0' }}>暂无人员，点击「从人员库选人」添加</div>}
               </div>
             ) : (
               <>
                 <div className="people-section">
                   <div className="people-section-header">
-                    <label className="section-select-all">
-                      <input type="checkbox"
-                        checked={stageMembers.length > 0 && stageMembers.every(p => selectedPeople.has(p.id))}
-                        onChange={e => {
-                          setSelectedPeople(prev => {
-                            const next = new Set(prev)
-                            stageMembers.forEach(p => e.target.checked ? next.add(p.id) : next.delete(p.id))
-                            return next
-                          })
-                        }} />
-                      台上人员
-                    </label>
+                    <span className="section-select-all">台上人员</span>
                     <span className="people-count-badge">{stageMembers.length}</span>
                   </div>
                   <SortablePeopleList
@@ -514,26 +454,13 @@ export default function SeatingPlan() {
                     members={stageMembers} venue={venue}
                     onDelete={pid => deletePerson(venue.id, pid)}
                     onReorder={reorderPeople}
-                    selected={selectedPeople}
-                    onCheck={(id, v) => setSelectedPeople(prev => { const s = new Set(prev); v ? s.add(id) : s.delete(id); return s })}
                     groupColor={stageGroup?.color ?? '#64748b'}
                   />
                   {stageMembers.length === 0 && <div style={{ color: 'var(--text3)', fontSize: 11, padding: '6px 0' }}>暂无台上人员</div>}
                 </div>
                 <div className="people-section">
                   <div className="people-section-header">
-                    <label className="section-select-all">
-                      <input type="checkbox"
-                        checked={floorMembers.length > 0 && floorMembers.every(p => selectedPeople.has(p.id))}
-                        onChange={e => {
-                          setSelectedPeople(prev => {
-                            const next = new Set(prev)
-                            floorMembers.forEach(p => e.target.checked ? next.add(p.id) : next.delete(p.id))
-                            return next
-                          })
-                        }} />
-                      台下人员
-                    </label>
+                    <span className="section-select-all">台下人员</span>
                     <span className="people-count-badge">{floorMembers.length}</span>
                   </div>
                   <SortablePeopleList
@@ -541,8 +468,6 @@ export default function SeatingPlan() {
                     members={floorMembers} venue={venue}
                     onDelete={pid => deletePerson(venue.id, pid)}
                     onReorder={reorderPeople}
-                    selected={selectedPeople}
-                    onCheck={(id, v) => setSelectedPeople(prev => { const s = new Set(prev); v ? s.add(id) : s.delete(id); return s })}
                     groupColor={floorGroup?.color ?? '#64748b'}
                   />
                   {floorMembers.length === 0 && <div style={{ color: 'var(--text3)', fontSize: 11, padding: '6px 0' }}>暂无台下人员</div>}
@@ -566,18 +491,12 @@ export default function SeatingPlan() {
         </button>
       </div>
 
-      {/* Import modal */}
-      {showImport && venue && (
-        <ImportModal
+      {/* Add from pool modal */}
+      {showAddFromPool && venue && (
+        <AddFromPoolModal
           venueId={venue.id}
           groups={venue.groups}
-          venuePeople={venue.people}
-          onImport={(entries, groupId, label) => bulkImportPeople(venue.id, entries, groupId, label)}
-          onBulkUpdateZone={(personIds, groupId) => {
-            bulkUpdateZone(venue.id, personIds, groupId)
-            runAutoAssign(venue.id)
-          }}
-          onClose={() => setShowImport(false)}
+          onClose={() => setShowAddFromPool(false)}
         />
       )}
 

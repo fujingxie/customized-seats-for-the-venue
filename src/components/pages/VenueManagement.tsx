@@ -155,10 +155,6 @@ export default function VenueManagement() {
   return (
     <div className="page-content">
       <div className="page-header">
-        <div>
-          <h1 className="page-title">会场管理</h1>
-          <p className="page-desc">创建并选择当前工作会场</p>
-        </div>
         <button className="btn-primary" onClick={() => setShowModal(true)}>
           <Plus size={16} /> 新建会场
         </button>

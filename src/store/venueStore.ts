@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Venue, Page, Person, Group, Zone, SortMode, VenueType, VenueConfig } from '../types'
+import { Venue, Page, Person, Group, Zone, SortMode, VenueType, VenueConfig, GlobalPerson } from '../types'
 import { autoAssign } from '../utils/autoAssign'
 
 const GROUP_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
@@ -9,6 +9,7 @@ interface VenueStore {
   venues: Venue[]
   activeVenueId: string | null
   activePage: Page
+  globalPeople: GlobalPerson[]
 
   setActivePage: (page: Page) => void
   setActiveVenue: (id: string) => void
@@ -32,6 +33,14 @@ interface VenueStore {
   runAutoAssign: (venueId: string) => void
   swapSeats: (venueId: string, seatA: string, seatB: string) => void
   clearAssignments: (venueId: string) => void
+
+  // Global people pool actions
+  addGlobalPerson: (name: string, label?: string) => void
+  updateGlobalPerson: (id: string, updates: Partial<GlobalPerson>) => void
+  deleteGlobalPerson: (id: string) => void
+  deleteGlobalPeople: (ids: string[]) => void
+  bulkImportGlobalPeople: (entries: { name: string }[], label?: string) => void
+  addFromPool: (venueId: string, items: { globalPersonId: string; name: string; label?: string; rank: number }[], groupId: string) => void
 }
 
 function uid() {
@@ -48,6 +57,7 @@ export const useVenueStore = create<VenueStore>()(
       venues: [],
       activeVenueId: null,
       activePage: 'venues',
+      globalPeople: [],
 
       setActivePage: (page) => set({ activePage: page }),
 
@@ -270,7 +280,72 @@ export const useVenueStore = create<VenueStore>()(
           ),
         }))
       },
+
+      // ── Global people pool ────────────────────────────────────────
+
+      addGlobalPerson: (name, label) => {
+        const person: GlobalPerson = { id: uid(), name, ...(label ? { label } : {}) }
+        set(s => ({ globalPeople: [...s.globalPeople, person] }))
+      },
+
+      updateGlobalPerson: (id, updates) => {
+        set(s => ({
+          globalPeople: s.globalPeople.map(p => (p.id === id ? { ...p, ...updates } : p)),
+        }))
+      },
+
+      deleteGlobalPerson: (id) => {
+        set(s => ({ globalPeople: s.globalPeople.filter(p => p.id !== id) }))
+      },
+
+      deleteGlobalPeople: (ids) => {
+        const idSet = new Set(ids)
+        set(s => ({ globalPeople: s.globalPeople.filter(p => !idSet.has(p.id)) }))
+      },
+
+      bulkImportGlobalPeople: (entries, label) => {
+        const newPeople: GlobalPerson[] = entries.map(e => ({
+          id: uid(),
+          name: e.name,
+          ...(label ? { label } : {}),
+        }))
+        set(s => ({ globalPeople: [...s.globalPeople, ...newPeople] }))
+      },
+
+      addFromPool: (venueId, items, groupId) => {
+        const venue = get().venues.find(v => v.id === venueId)
+        if (!venue) return
+
+        const newPeople: Person[] = items.map(item => ({
+          id: uid(),
+          name: item.name,
+          rank: item.rank,
+          groupId,
+          globalPersonId: item.globalPersonId,
+          ...(item.label ? { label: item.label } : {}),
+        }))
+
+        set(s => ({
+          venues: s.venues.map(v =>
+            v.id === venueId
+              ? { ...v, people: [...v.people, ...newPeople], updatedAt: now() }
+              : v
+          ),
+        }))
+      },
     }),
-    { name: 'venue-seating-store' }
+    {
+      name: 'venue-seating-store',
+      version: 1,
+      migrate: (state: any, version: number) => {
+        if (version < 1) {
+          if (state.venues) {
+            state.venues = state.venues.map((v: any) => ({ ...v, people: [], assignments: {} }))
+          }
+          state.globalPeople = []
+        }
+        return state
+      },
+    }
   )
 )

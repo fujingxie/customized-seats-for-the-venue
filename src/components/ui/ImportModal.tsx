@@ -352,10 +352,13 @@ export default function ImportModal({
     personIds: [], groupId: groups[0]?.id ?? '',
   })
 
+  // When no groups are provided (global people pool context), hide bylabel tab and group selector
+  const hasGroups = groups.length > 0
+
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'excel',   label: 'Excel 导入', icon: <Upload size={14} /> },
     { key: 'text',    label: '文本导入',   icon: <FileText size={14} /> },
-    { key: 'bylabel', label: '分组导入',   icon: <Tag size={14} /> },
+    ...(hasGroups ? [{ key: 'bylabel' as Tab, label: '分组导入', icon: <Tag size={14} /> }] : []),
   ]
 
   function handleConfirm() {
@@ -363,7 +366,7 @@ export default function ImportModal({
       if (!byLabelSel.personIds.length) return
       onBulkUpdateZone?.(byLabelSel.personIds, byLabelSel.groupId)
     } else {
-      if (!pending.length || !groupId) return
+      if (!pending.length) return
       onImport(pending, groupId, labelInput.trim() || undefined)
     }
     onClose()
@@ -423,8 +426,8 @@ export default function ImportModal({
           </div>
         )}
 
-        {/* Zone group selector — for excel/text tabs */}
-        {tab !== 'bylabel' && (
+        {/* Zone group selector — for excel/text tabs, only when groups exist */}
+        {tab !== 'bylabel' && hasGroups && (
           <div className="import-group-select">
             <span className="import-group-label">导入到区域：</span>
             <select className="form-input" style={{ flex: 1, fontSize: 12 }}

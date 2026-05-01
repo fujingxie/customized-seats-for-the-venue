@@ -2,6 +2,12 @@ export type VenueType = 'circle' | 'ellipse' | 'rectangle' | 'u-shape'
 export type SortMode = 'center-alternating' | 'clockwise' | 'counter-clockwise'
 export type Zone = 'stage' | 'floor' | 'all'
 
+export interface GlobalPerson {
+  id: string
+  name: string
+  label?: string  // e.g. company name
+}
+
 export interface CircleConfig {
   totalSeats: number
   centerSeatIndex: number
@@ -30,8 +36,9 @@ export interface Person {
   id: string
   name: string
   rank: number
-  groupId: string   // zone group (台上嘉宾组 / 参会人员组)
-  label?: string    // custom tag set at import time (e.g. company name)
+  groupId: string        // zone group (台上嘉宾组 / 参会人员组)
+  label?: string         // custom tag set at import time (e.g. company name)
+  globalPersonId?: string // reference to GlobalPerson.id if added from pool
 }
 
 export interface Group {
